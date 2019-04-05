@@ -1,4 +1,4 @@
-import torch
+# import torch
 import os
 # from torch.utils import data
 
@@ -78,16 +78,16 @@ class AutoEncoder(nn.Module):
 
         self.temperature = temperature
 
-        self.k_size = 5
+        self.k_size = 3
         self.padding = self.k_size // 2
         self.st = 1
         self.bias = bias
 
         self.filter_size = 16
 
-        self.upsample_mode = 'bilinear'
-        """
-        Can take a value of nearest, linear, bilinear or trilinear.
+        self.upsample_mode = 'nearest'
+        r"""
+        Upsampling algorithm: one of ``'nearest'``, ``'linear'``, ``'bilinear'``, ``'bicubic'``x and ``'trilinear'``.
         """
 
         # -------------------------------- Encoding segment --------------------------------

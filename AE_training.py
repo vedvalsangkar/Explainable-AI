@@ -8,22 +8,22 @@ import numpy as np
 from torch import cuda, nn, optim, cosine_similarity
 from torch.utils import data
 from torchvision import transforms
+from torchvision.utils import save_image
 
 from model_def import AndImageDataSet, AutoEncoder
 
 
-def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_stmp: str):
+def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_stmp: str, train_only: bool = False):
 
     # -------------------------------- Hyper-parameters --------------------------------
-    learning_rate = 0.0001
-    lamb = 3
+    learning_rate = 0.005
+    lamb = 0.04
+    epochs = 25
 
-    epochs = 1
-
-    batch_size = 64
+    batch_size = 32
     batch_print = 20
 
-    th = 0.86
+    th = 0.85
 
     op_dir = "models/"
     # ----------------------------------------------------------------------------------
@@ -37,9 +37,11 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
                                                            ),
                                    transforms.ToTensor()])
 
-    training_set = AndImageDataSet(transform=train_tf,
-                                   img_folder=train_im_folder
-                                   )
+    # training_set = AndImageDataSet(transform=train_tf,
+    #                                img_folder=train_im_folder
+    #                                )
+
+    training_set = AndImageDataSet(img_folder=train_im_folder)
 
     train_loader = data.DataLoader(dataset=training_set,
                                    batch_size=batch_size,
@@ -60,7 +62,7 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
     criterion = nn.MSELoss()
 
     # optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=lamb, amsgrad=False)
-    optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.4, weight_decay=lamb, nesterov=True)
+    optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.3, weight_decay=lamb, nesterov=True)
 
     running_loss = 0.0
     past_loss = np.inf
@@ -76,11 +78,6 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
 
     for epoch in range(epochs):
         print("")
-        # if (epoch + 1) % 6 == 0:
-        #     learning_rate /= 2
-        #     print("Learnin rate dropping to {0}".format(learning_rate))
-        #     for params in optimizer.param_groups:
-        #         params['lr'] = learning_rate
 
         for i, image in enumerate(train_loader):
 
@@ -115,9 +112,19 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
 
                 running_loss = 0.0
 
+            if i+1 == total_len:
+                # print(out[0])
+                save_image(tensor=out[-4:],
+                           filename="visualization/and_set_{0}_E{1}.png".format(tag, epoch),
+                           nrow=2,
+                           normalize=False)
+
     train_time = time.time()
     print("\nTraining completed in {0} sec\n".format(train_time - start_time))
     # ----------------------------------------------------------------------------------
+
+    if train_only:
+        return model
 
     # ------------------------------ Start of evaluation -------------------------------
     print("Starting evaluation\n")
@@ -125,27 +132,34 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
     model.eval()
 
     count = 0
+    tot = 0
 
     for i, (left_im, right_im, label, l_name, r_name) in enumerate(test_loader):
 
-        left = left_im.to(device)
-        right = right_im.to(device)
-        lab = np.asarray(label)
+        try:
 
-        out1 = model(left)
-        out2 = model(right)
+            left = left_im.to(device)
+            right = right_im.to(device)
+            lab = np.asarray(label)
 
-        score = cosine_similarity(out1, out2)
+            out1 = model(left)
+            out2 = model(right)
 
-        prediction = score.detach().cpu().numpy() >= th
+            score = cosine_similarity(out1, out2)
 
-        print(score)
-        # print(prediction)
-        count += (prediction == lab).sum()
+            prediction = score.detach().cpu().numpy() >= th
+
+            # print(score)
+            # print(prediction)
+            count += (prediction == lab).sum()
+            tot += left_im.shape[0]
+
+        except FileNotFoundError:
+            print("File not found: {0}. Skipping iteration {1}".format(FileNotFoundError.filename, i))
 
     # print(count)
-    acc = (count * 100)/test_set.__len__()
-    print("Accuracy = {0:.06f}".format(acc))
+    acc = (count * 100)/tot
+    print("\nAccuracy = {0:.06f} %\n\n".format(acc))
 
     # ----------------------------------------------------------------------------------
 
@@ -173,4 +187,16 @@ if __name__ == "__main__":
          test_im_folder="seen-dataset/ValidationSet/",
          pair_file="seen-dataset/dataset_seen_validation_siamese.csv",
          tag="SN",
+         t_stmp=tstmp)
+
+    main(train_im_folder="shuffled-dataset/TrainingSet/",
+         test_im_folder="shuffled-dataset/ValidationSet/",
+         pair_file="shuffled-dataset/dataset_seen_validation_siamese.csv",
+         tag="SH",
+         t_stmp=tstmp)
+
+    main(train_im_folder="unseen-dataset/TrainingSet/",
+         test_im_folder="unseen-dataset/ValidationSet/",
+         pair_file="unseen-dataset/dataset_seen_validation_siamese.csv",
+         tag="UN",
          t_stmp=tstmp)
