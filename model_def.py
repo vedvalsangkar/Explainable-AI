@@ -10,7 +10,7 @@ from torchvision import transforms
 from PIL import Image
 
 
-class AndImageDataSet(Dataset):
+class FeatureExtractorDataSet(Dataset):
 
     def __init__(self, img_folder, pair_file=None, transform=transforms.ToTensor()):
 
@@ -60,7 +60,73 @@ class AndImageDataSet(Dataset):
             left_im = self.img_transforms(image1)
             right_im = self.img_transforms(image2)
 
-            return left_im, right_im, label, l_name, r_name
+            return left_im, right_im, label
+
+    def __len__(self):
+        """
+        Returns number of data entries.
+        :return: Data size.
+        """
+        return self.data_len
+
+
+class FeatureClassifierDataSet(Dataset):
+
+    def __init__(self, img_folder, pair_file=None, feature_csv="15features.csv", transform=transforms.ToTensor()):
+
+        self.img_transforms = transform
+
+        self.img_folder = img_folder
+
+        if img_folder is None:
+            raise ValueError("Provide image folder name!")
+
+        self.features_df = pd.read_csv(filepath_or_buffer=feature_csv,
+                                       header=0,
+                                       index_col=0
+                                       )
+
+        if pair_file is not None:
+
+            self.training_mode = False
+            self.main_data = pd.read_csv(filepath_or_buffer=pair_file,
+                                         header=0,
+                                         index_col=0
+                                         )
+            self.data_len = self.main_data.shape[0]
+
+        else:
+
+            self.training_mode = True
+            self.main_data = os.listdir(img_folder)
+            self.data_len = len(self.main_data)
+
+    def __getitem__(self, index):
+
+        if self.training_mode:
+
+            image = Image.open(self.img_folder + self.main_data[index])
+
+            # feature_df.loc["0705b_num3.png"].values
+
+            return self.img_transforms(image), self.features_df.loc[self.main_data[index]].values
+
+        else:
+
+            l_name = self.main_data.iloc[index, 0]
+            r_name = self.main_data.iloc[index, 1]
+
+            image1 = Image.open(self.img_folder + l_name)
+            image2 = Image.open(self.img_folder + r_name)
+            label = self.main_data.iloc[index, 2]
+
+            left_im = self.img_transforms(image1)
+            right_im = self.img_transforms(image2)
+
+            left_feat = self.features_df.loc[l_name].values
+            right_feat = self.features_df.loc[r_name].values
+
+            return left_im, right_im, label, left_feat, right_feat
 
     def __len__(self):
         """
@@ -72,13 +138,11 @@ class AndImageDataSet(Dataset):
 
 class AutoEncoder(nn.Module):
 
-    def __init__(self, bias=False, temperature=1.0):
+    def __init__(self, bias=False, kernel_size=3):
 
         super(AutoEncoder, self).__init__()
 
-        self.temperature = temperature
-
-        self.k_size = 3
+        self.k_size = kernel_size
         self.padding = self.k_size // 2
         self.st = 1
         self.bias = bias
@@ -319,6 +383,3 @@ class AutoEncoder(nn.Module):
             out = out.reshape(out.size(0), -1)
 
         return out
-
-    def set_temperature(self, temperature):
-        self.temperature = temperature
