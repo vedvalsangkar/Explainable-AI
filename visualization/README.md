@@ -1,4 +1,3 @@
-#Training Output Images
+# Training Output Images
 
-This folder contains images of the last batch of every epoch as a means of visualizing auto-encoder output. The folder
-also contains ROC graphs generated.
+This folder contains images of the last batch of every epoch as a means of visualizing auto-encoder output.

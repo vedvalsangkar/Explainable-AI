@@ -13,10 +13,7 @@ from torch.utils import data
 # from torchvision import transforms
 from torchvision.utils import save_image
 
-from sklearn.metrics import roc_curve, auc
-from matplotlib import pyplot as plt
-
-from model_def import FeatureExtractorDataSet, AutoEncoder
+from model_def import FeatureExtractorDataSet, AutoEncoder, plot_roc
 
 
 def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_stmp: str, train_only: bool = False):
@@ -124,7 +121,7 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
             if i+1 == total_len and epoch == 24:
                 # print(out[0])
                 save_image(tensor=out[:4],
-                           filename="visualization/and_Set_{0}_E{1}.png".format(tag, epoch),
+                           filename="visualization/{0}_T{1}.png".format(tag, t_stmp),
                            nrow=2,
                            normalize=True)
 
@@ -132,8 +129,8 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
     print("\nTraining completed in {0} sec\n".format(train_time - start_time))
     # ----------------------------------------------------------------------------------
 
-    # if train_only:
-    #     return model
+    if train_only:
+        return model
 
     # ------------------------------ Start of evaluation -------------------------------
     print("Starting evaluation\n")
@@ -181,8 +178,8 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
 
     # ----------------------------------------------------------------------------------
 
-    if train_only:
-        return model
+    # if train_only:
+    #     return model
 
     # --------------------------------- Saving model -----------------------------------
     filename = op_dir + "P2_A-{2:.03f}_{1}_T_{0}.pt".format(t_stmp, tag, acc)
@@ -196,28 +193,6 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
 
     torch.save(save_file, filename)
     # ----------------------------------------------------------------------------------
-
-
-def plot_roc(y_true, y_score, tag, tstmp):
-
-    sets = {"SN": "Seen", "UN": "Unseen", "SH": "Shuffled"}
-
-    fpr, tpr, thresh = roc_curve(y_true=y_true, y_score=y_score)
-    area = auc(fpr, tpr)
-
-    print("Thresholds: ", thresh)
-
-    plt.figure()
-    plt.plot(fpr, tpr, color='darkorange', lw=2, label="ROC curve (area = {0:.2f})".format(area))
-    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-    plt.xlim([0.0, 1.05])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title("Receiver Operating Characteristic for {} data".format(sets[tag]))
-    plt.legend(loc="lower right")
-    plt.savefig(fname="visualization/ROC_{0}_{1}.jpg".format(tag, tstmp))
-    # plt.show()
 
 
 if __name__ == "__main__":

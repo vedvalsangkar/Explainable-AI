@@ -3,11 +3,15 @@ import os
 # from torch.utils import data
 
 import pandas as pd
-from torch import nn        # , optim
+# import numpy as np
+from torch import nn  # , optim
 # from torch.nn import functional as F
 from torch.utils.data.dataset import Dataset
 from torchvision import transforms
 from PIL import Image
+
+from sklearn.metrics import roc_curve, auc
+from matplotlib import pyplot as plt
 
 
 class FeatureExtractorDataSet(Dataset):
@@ -84,11 +88,14 @@ class FeatureClassifierDataSet(Dataset):
         self.features_df = pd.read_csv(filepath_or_buffer=feature_csv,
                                        header=0,
                                        index_col=0
-                                       )
+                                       ) - 1
 
         if pair_file is not None:
 
             self.training_mode = False
+
+            # self.__clean_list_2__(pair_file, img_folder)
+
             self.main_data = pd.read_csv(filepath_or_buffer=pair_file,
                                          header=0,
                                          index_col=0
@@ -98,18 +105,63 @@ class FeatureClassifierDataSet(Dataset):
         else:
 
             self.training_mode = True
-            self.main_data = os.listdir(img_folder)
+            # self.main_data = os.listdir(img_folder)
+            self.main_data = self.__clean_list__(os.listdir(img_folder))
             self.data_len = len(self.main_data)
+
+    def __clean_list__(self, input_list):
+
+        remove_list = []
+
+        for ele in input_list:
+            try:
+                _ = self.features_df.loc[ele]
+            except KeyError:
+                remove_list.append(ele)
+
+        return [e for e in input_list if e not in remove_list]
+
+    def __clean_list_2__(self, filename, folder):
+
+        df = pd.read_csv(filepath_or_buffer=filename, header=0, index_col=0)
+        del_list = []
+
+        for i, row in df.iterrows():
+            # print(row.values)
+            try:
+                f = open(folder+row.iloc[0])
+                f.close()
+            except FileNotFoundError:
+                del_list.append(i)
+                print("Deleting row: ", row.values.tolist())
+                continue
+            try:
+                f = open(folder+row.iloc[1])
+                f.close()
+            except FileNotFoundError:
+                del_list.append(i)
+                print("Deleting row: ", row.values.tolist())
+                continue
+
+        # print(del_list)
+
+        if len(del_list) != 0:
+            df.drop(labels=del_list, inplace=True)
+            df.to_csv(path_or_buf=filename)
 
     def __getitem__(self, index):
 
         if self.training_mode:
 
             image = Image.open(self.img_folder + self.main_data[index])
+            val = 0
 
-            # feature_df.loc["0705b_num3.png"].values
+            try:
+                val = self.features_df.loc[self.main_data[index]].values
+            except KeyError:
+                print("getitem error:", index, self.main_data[index])
 
-            return self.img_transforms(image), self.features_df.loc[self.main_data[index]].values
+            return self.img_transforms(image), val
 
         else:
 
@@ -123,10 +175,11 @@ class FeatureClassifierDataSet(Dataset):
             left_im = self.img_transforms(image1)
             right_im = self.img_transforms(image2)
 
-            left_feat = self.features_df.loc[l_name].values
-            right_feat = self.features_df.loc[r_name].values
+            # left_feat = self.features_df.loc[l_name].values
+            # right_feat = self.features_df.loc[r_name].values
 
-            return left_im, right_im, label, left_feat, right_feat
+            # return left_im, right_im, label, left_feat, right_feat, l_name, r_name
+            return left_im, right_im, label, l_name, r_name
 
     def __len__(self):
         """
@@ -383,3 +436,66 @@ class AutoEncoder(nn.Module):
             out = out.reshape(out.size(0), -1)
 
         return out
+
+
+class FeatureClassifier(nn.Module):
+
+    def __init__(self, num_classes, input_feats=512, temprature=1.0, bias=False):
+        super(FeatureClassifier, self).__init__()
+
+        self.temp = temprature
+
+        self.hidden = 128
+
+        self.layer_1 = nn.Sequential(nn.Linear(in_features=input_feats,
+                                               out_features=self.hidden,
+                                               bias=bias
+                                               ),
+                                     nn.ReLU(),
+                                     nn.Dropout(p=0.4)
+                                     )
+
+        self.layer_2 = nn.Sequential(nn.Linear(in_features=self.hidden,
+                                               out_features=num_classes,
+                                               bias=bias
+                                               ),
+                                     nn.Softmax(dim=1)
+                                     )
+
+    def forward(self, x):
+        out = self.layer_1(x)
+        out = self.layer_2(out / self.temp)
+
+        return out
+
+
+def plot_roc(y_true, y_score, tag, tstmp):
+    r"""
+    Code referred from official scikit-learns examples:
+    https://scikit-learn.org/stable/auto_examples/model_selection/plot_roc.html
+    <p>
+    :param y_true:
+    :param y_score:
+    :param tag:
+    :param tstmp:
+    :return:
+    """
+
+    sets = {"SN": "Seen", "UN": "Unseen", "SH": "Shuffled"}
+
+    fpr, tpr, thresh = roc_curve(y_true=y_true, y_score=y_score)
+    area = auc(fpr, tpr)
+
+    # print("\nThresholds: ", thresh)
+
+    plt.figure()
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label="ROC curve (area = {0:.2f})".format(area))
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.05])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title("Receiver Operating Characteristic for {} data".format(sets[tag]))
+    plt.legend(loc="lower right")
+    plt.savefig(fname="results/ROC_{0}_{1}.jpg".format(tag, tstmp))
+    # plt.show()
