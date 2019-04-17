@@ -10,13 +10,23 @@ import numpy as np
 
 from torch import cuda, nn, optim, cosine_similarity
 from torch.utils import data
-# from torchvision import transforms
 from torchvision.utils import save_image
 
 from model_def import FeatureExtractorDataSet, AutoEncoder, plot_roc
 
 
-def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_stmp: str, train_only: bool = False):
+def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_stmp: str, verbose: bool = False):
+    """
+    Main function for part 1.
+
+    :param train_im_folder:
+    :param test_im_folder:
+    :param pair_file:
+    :param tag:
+    :param t_stmp:
+    :param verbose:
+    :return:
+    """
 
     # -------------------------------- Hyper-parameters --------------------------------
     learning_rate = 0.005
@@ -50,7 +60,8 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
                                   batch_size=batch_size,
                                   shuffle=True)
 
-    print("Dataset and data loaders acquired.")
+    if verbose:
+        print("Dataset and data loaders acquired.")
 
     model = AutoEncoder(bias=True).to(device)
     model.train(True)
@@ -77,13 +88,15 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
     # ----------------------------------------------------------------------------------
 
     # ------------------------------- Start of training --------------------------------
-    print("\nStart of training.")
+    print("\nStart of Part 1 training.")
     print("Total batches in an epoch: {0}".format(total_len))
 
     start_time = time.time()
 
     for epoch in range(epochs):
-        print("")
+
+        if verbose:
+            print("")
 
         for i, image in enumerate(train_loader):
 
@@ -108,17 +121,18 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
 
             if (i + 1) % batch_print == 0:
 
-                print(
-                    "\rEpoch: {0}, step: {1}/{2} Running Loss (avg): {3:.06f}, Past: {4:.06f}    ".format(
-                        epoch + 1, i + 1, total_len, (running_loss / batch_print), (past_loss / batch_print)),
-                    end="")
+                if verbose:
+                    print(
+                        "\rEpoch: {0}, step: {1}/{2} Running Loss (avg): {3:.06f}, Past: {4:.06f}    ".format(
+                            epoch + 1, i + 1, total_len, (running_loss / batch_print), (past_loss / batch_print)),
+                        end="")
 
                 if running_loss < past_loss:
                     past_loss = running_loss
 
                 running_loss = 0.0
 
-            if i+1 == total_len and epoch == 24:
+            if i + 1 == total_len and epoch == 24:
                 # print(out[0])
                 save_image(tensor=out[:4],
                            filename="visualization/{0}_T{1}.png".format(tag, t_stmp),
@@ -129,11 +143,11 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
     print("\nTraining completed in {0} sec\n".format(train_time - start_time))
     # ----------------------------------------------------------------------------------
 
-    if train_only:
-        return model
+    # if train_only:
+    #     return model
 
     # ------------------------------ Start of evaluation -------------------------------
-    print("Starting evaluation\n")
+    print("Starting Part 1 evaluation\n")
 
     model.eval()
 
@@ -143,7 +157,7 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
     total_score = np.array([])
     total_label = np.array([])
 
-    for i, (left_im, right_im, label) in enumerate(test_loader):   # l_name, r_name
+    for i, (left_im, right_im, label) in enumerate(test_loader):  # l_name, r_name
 
         try:
 
@@ -173,8 +187,8 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
     plot_roc(y_true=total_label, y_score=total_score, tag=tag, tstmp=t_stmp)
 
     # print(count)
-    acc = (count * 100)/tot
-    print("\nAccuracy = {0:.06f} %\n\n".format(acc))
+    acc = (count * 100) / tot
+    # print("\nAccuracy = {0:.06f} %\n\n".format(acc))
 
     # ----------------------------------------------------------------------------------
 
@@ -191,11 +205,14 @@ def main(train_im_folder: str, test_im_folder: str, pair_file: str, tag: str, t_
                  "optimizer": optimizer.state_dict()
                  }
 
-    torch.save(save_file, filename)
+    torch.save(obj=save_file, f=filename)
     # ----------------------------------------------------------------------------------
+
+    return model
 
 
 if __name__ == "__main__":
+    # This is sample imput for a test run. Actual input is given from file main.py
 
     print("Program run started at", time.asctime())
 

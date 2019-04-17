@@ -1,9 +1,6 @@
-# import torch
 import os
-# from torch.utils import data
 
 import pandas as pd
-# import numpy as np
 from torch import nn  # , optim
 # from torch.nn import functional as F
 from torch.utils.data.dataset import Dataset
@@ -15,8 +12,18 @@ from matplotlib import pyplot as plt
 
 
 class FeatureExtractorDataSet(Dataset):
+    """
+    This is the custom dataset for autoencoder as feature extractor used for both training and testing.
+    """
 
     def __init__(self, img_folder, pair_file=None, transform=transforms.ToTensor()):
+        """
+        Initializer method for part 1 of the project.
+
+        :param img_folder: Folder with images.
+        :param pair_file:  File with pairs of images for testing.
+        :param transform:  Image transformation to be applied.
+        """
 
         self.img_transforms = transform
 
@@ -24,11 +31,6 @@ class FeatureExtractorDataSet(Dataset):
 
         if img_folder is None:
             raise ValueError("Provide image folder name!")
-
-        # if img_folder is not None:
-        #     self.training_mode = True
-        #     self.main_data = os.listdir(img_folder)
-        #     self.data_len = len(self.main_data)
 
         if pair_file is not None:
 
@@ -45,6 +47,12 @@ class FeatureExtractorDataSet(Dataset):
             self.data_len = len(self.main_data)
 
     def __getitem__(self, index):
+        """
+        Item getter function.
+
+        :param index: Index of input data to be fetched.
+        :return: Image for training / tuple of 2 images and the label for testing.
+        """
 
         if self.training_mode:
 
@@ -69,14 +77,27 @@ class FeatureExtractorDataSet(Dataset):
     def __len__(self):
         """
         Returns number of data entries.
+
         :return: Data size.
         """
         return self.data_len
 
 
 class FeatureClassifierDataSet(Dataset):
+    """
+    This is the custom dataset for linear dense network for each of the 15 features of 'AND' images for both
+    training and testing.
+    """
 
     def __init__(self, img_folder, pair_file=None, feature_csv="15features.csv", transform=transforms.ToTensor()):
+        """
+        Constructor method for part 2 of the project.
+
+        :param img_folder:  Folder with images.
+        :param pair_file:   File with pairs of images for testing.
+        :param feature_csv: File with features for training.
+        :param transform:   Image transformation to be applied.
+        """
 
         self.img_transforms = transform
 
@@ -94,8 +115,6 @@ class FeatureClassifierDataSet(Dataset):
 
             self.training_mode = False
 
-            # self.__clean_list_2__(pair_file, img_folder)
-
             self.main_data = pd.read_csv(filepath_or_buffer=pair_file,
                                          header=0,
                                          index_col=0
@@ -105,11 +124,16 @@ class FeatureClassifierDataSet(Dataset):
         else:
 
             self.training_mode = True
-            # self.main_data = os.listdir(img_folder)
             self.main_data = self.__clean_list__(os.listdir(img_folder))
             self.data_len = len(self.main_data)
 
     def __clean_list__(self, input_list):
+        """
+        Simple cleaner function to filter out image names which do not have a record in the features file.
+
+        :param input_list: Names of images in input directory as a list
+        :return: Cleaned list.
+        """
 
         remove_list = []
 
@@ -121,35 +145,38 @@ class FeatureClassifierDataSet(Dataset):
 
         return [e for e in input_list if e not in remove_list]
 
-    def __clean_list_2__(self, filename, folder):
-
-        df = pd.read_csv(filepath_or_buffer=filename, header=0, index_col=0)
-        del_list = []
-
-        for i, row in df.iterrows():
-            # print(row.values)
-            try:
-                f = open(folder+row.iloc[0])
-                f.close()
-            except FileNotFoundError:
-                del_list.append(i)
-                print("Deleting row: ", row.values.tolist())
-                continue
-            try:
-                f = open(folder+row.iloc[1])
-                f.close()
-            except FileNotFoundError:
-                del_list.append(i)
-                print("Deleting row: ", row.values.tolist())
-                continue
-
-        # print(del_list)
-
-        if len(del_list) != 0:
-            df.drop(labels=del_list, inplace=True)
-            df.to_csv(path_or_buf=filename)
+    # def __clean_list_2__(self, filename, folder):
+    #
+    #     df = pd.read_csv(filepath_or_buffer=filename, header=0, index_col=0)
+    #     del_list = []
+    #
+    #     for i, row in df.iterrows():
+    #         try:
+    #             f = open(folder+row.iloc[0])
+    #             f.close()
+    #         except FileNotFoundError:
+    #             del_list.append(i)
+    #             print("Deleting row: ", row.values.tolist())
+    #             continue
+    #         try:
+    #             f = open(folder+row.iloc[1])
+    #             f.close()
+    #         except FileNotFoundError:
+    #             del_list.append(i)
+    #             print("Deleting row: ", row.values.tolist())
+    #             continue
+    #
+    #     if len(del_list) != 0:
+    #         df.drop(labels=del_list, inplace=True)
+    #         df.to_csv(path_or_buf=filename)
 
     def __getitem__(self, index):
+        """
+        Item getter method.
+
+        :param index: Index of input data to be fetched.
+        :return: Image and features for training / 2 images, label and image names for testing.
+        """
 
         if self.training_mode:
 
@@ -184,14 +211,24 @@ class FeatureClassifierDataSet(Dataset):
     def __len__(self):
         """
         Returns number of data entries.
+
         :return: Data size.
         """
         return self.data_len
 
 
 class AutoEncoder(nn.Module):
+    """
+    Model for autoencoder as feature extractor.
+    """
 
     def __init__(self, bias=False, kernel_size=3):
+        """
+        Model initializer method.
+
+        :param bias: Bias in system (default False).
+        :param kernel_size: Convolution kernel size.
+        """
 
         super(AutoEncoder, self).__init__()
 
@@ -417,6 +454,12 @@ class AutoEncoder(nn.Module):
                                         )
 
     def forward(self, x):
+        """
+        Forward method.
+
+        :param x: Input
+        :return:  Convolution output.
+        """
 
         out = self.encoding_1(x)
         out = self.encoding_2(out)
@@ -439,8 +482,19 @@ class AutoEncoder(nn.Module):
 
 
 class FeatureClassifier(nn.Module):
+    """
+    Simple linear dense model for training feature value classification from extracted image features.
+    """
 
     def __init__(self, num_classes, input_feats=512, temprature=1.0, bias=False):
+        """
+        Model initializer method.
+
+        :param num_classes: Number of states the feature can take.
+        :param input_feats: Input nodes (512 or as obtained from the autoencoder model)
+        :param temprature:  Constant to scale softmax input for better discrimination.
+        :param bias:        System bias.
+        """
         super(FeatureClassifier, self).__init__()
 
         self.temp = temprature
@@ -463,6 +517,12 @@ class FeatureClassifier(nn.Module):
                                      )
 
     def forward(self, x):
+        """
+        Forward method.
+
+        :param x: Input
+        :return:  Convolution output.
+        """
         out = self.layer_1(x)
         out = self.layer_2(out / self.temp)
 
@@ -474,11 +534,10 @@ def plot_roc(y_true, y_score, tag, tstmp):
     Code referred from official scikit-learns examples:
     https://scikit-learn.org/stable/auto_examples/model_selection/plot_roc.html
     <p>
-    :param y_true:
-    :param y_score:
-    :param tag:
-    :param tstmp:
-    :return:
+    :param y_true:  Label of the texting data.
+    :param y_score: Similarity score obtained from cosine similarity.
+    :param tag:     Tag for filename.
+    :param tstmp:   Time-stamp for filename.
     """
 
     sets = {"SN": "Seen", "UN": "Unseen", "SH": "Shuffled"}
@@ -498,4 +557,3 @@ def plot_roc(y_true, y_score, tag, tstmp):
     plt.title("Receiver Operating Characteristic for {} data".format(sets[tag]))
     plt.legend(loc="lower right")
     plt.savefig(fname="results/ROC_{0}_{1}.jpg".format(tag, tstmp))
-    # plt.show()

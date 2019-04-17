@@ -1,6 +1,5 @@
 import time
 import pandas as pd
-import numpy as np
 
 import torch
 
@@ -9,22 +8,20 @@ from torch.utils import data
 
 from model_def import AutoEncoder, FeatureClassifier, FeatureClassifierDataSet, plot_roc
 
-import AE_training as ae
-
 
 def main(extractor_model: AutoEncoder, train_img_folder: str, test_img_folder: str,
-         pair_file: str, tag: str, t_stmp: str):
+         pair_file: str, tag: str, t_stmp: str, verbose: bool = False):
     # -------------------------------- Hyper-parameters --------------------------------
     learning_rate = 0.0001
-    lamb = 0.001
-    epochs = 10
+    lamb = 0.0015
+    epochs = 20
 
     batch_size = 32
     batch_print = 50
 
     threshold = 0.8
 
-    sgd_momentum = 0.1
+    # sgd_momentum = 0.1
 
     op_dir = "models/"
     # ----------------------------------------------------------------------------------
@@ -46,11 +43,8 @@ def main(extractor_model: AutoEncoder, train_img_folder: str, test_img_folder: s
                                   batch_size=batch_size,
                                   shuffle=True)
 
-    print("Dataset and data loaders acquired.")
-
-    # for i, (left_im, right_im, label, l_name, r_name) in enumerate(test_loader):
-    #     print(l_name)
-    #     print(type(l_name))
+    if verbose:
+        print("Dataset and data loaders acquired.")
 
     extractor_model.to(device)
     extractor_model.eval()
@@ -61,7 +55,7 @@ def main(extractor_model: AutoEncoder, train_img_folder: str, test_img_folder: s
     optimizers = dict()
     criteria = dict()
 
-    class_nums = get_class_nums()
+    class_nums, col_names = get_class_nums()
 
     for i, val in enumerate(class_nums):
         models[i] = FeatureClassifier(num_classes=val, temprature=0.9, bias=True).to(device)
@@ -81,17 +75,11 @@ def main(extractor_model: AutoEncoder, train_img_folder: str, test_img_folder: s
 
         criteria[i] = nn.CrossEntropyLoss()
 
-    # optimizer = optim.Adam(params=model.parameters(),
-    #                        lr=learning_rate,
-    #                        weight_decay=lamb,
-    #                        amsgrad=False
-    #                        )
-
     total_len = len(train_loader)
     # ----------------------------------------------------------------------------------
 
     # ------------------------------- Start of training --------------------------------
-    print("\nStart of training.")
+    print("\nStart of Part 2 training.")
     print("Total batches in an epoch: {0}".format(total_len))
 
     start_time = time.time()
@@ -101,10 +89,12 @@ def main(extractor_model: AutoEncoder, train_img_folder: str, test_img_folder: s
 
     for model_num in range(15):
 
-        print("\n\nFeature {0}: ".format(model_num + 1), end="")
+        if verbose:
+            print("\n\nFeature {0}: ".format(model_num + 1), end="")
 
         for epoch in range(epochs):
-            print("")
+            if verbose:
+                print("")
 
             for i, (image, feats) in enumerate(train_loader):
 
@@ -142,33 +132,39 @@ def main(extractor_model: AutoEncoder, train_img_folder: str, test_img_folder: s
 
                     acc = (100 * cor) / tot
 
-                    print(
-                        "\rFeature: {0}, Epoch: {1}, Step: {2}/{3}, Loss: {4:.04f}, Running Accuracy: {5:.06f}".format(
-                            model_num + 1, epoch + 1, i + 1, total_len, loss.item(), acc),
-                        end="")
+                    if verbose:
+                        print(
+                            "\rFeature: {0}, Epoch: {1}, Step: {2}/{3}, Loss: {4:.04f}, Running Accuracy: {5:.06f}".format(
+                                model_num + 1, epoch + 1, i + 1, total_len, loss.item(), acc),
+                            end="")
                     cor = 0
                     tot = 0
-
-                    # if acc > 85:
-                    #     break
 
     train_time = time.time()
     print("\n\nTraining completed in {0:.03f} sec\n".format(train_time - start_time))
     # ----------------------------------------------------------------------------------
 
-    # ------------------------------ Start of evaluation -------------------------------
-    print("Starting evaluation\n")
+    # --------------------------------- Saving models ----------------------------------
+    save_state = dict()
 
     for model_num in range(15):
         models[model_num].eval()
+        save_state[model_num] = models[model_num].state_dict()
 
-    col_names = ['pen_pressure', 'letter_spacing', 'size', 'dimension', 'is_lowercase', 'is_continuous',
-                 'slantness', 'tilt', 'entry_stroke_a', 'staff_of_a', 'formation_n', 'staff_of_d',
-                 'exit_stroke_d', 'word_formation', 'constancy']
+    filename = op_dir + "P2_Fts_{1}_T_{0}.pt".format(t_stmp, tag)
+
+    torch.save(obj=save_state, f=filename)
+
+    # col_names = ['pen_pressure', 'letter_spacing', 'size', 'dimension', 'is_lowercase', 'is_continuous',
+    #              'slantness', 'tilt', 'entry_stroke_a', 'staff_of_a', 'formation_n', 'staff_of_d',
+    #              'exit_stroke_d', 'word_formation', 'constancy']
+    # ----------------------------------------------------------------------------------
+
+    # ------------------------------ Start of evaluation -------------------------------
+    print("Starting Part 2 evaluation\n")
 
     results = pd.DataFrame()
 
-    # for i, (left_im, right_im, label, left_feat, right_feat, l_name, r_name) in enumerate(test_loader):
     for i, (left_im, right_im, label, l_name, r_name) in enumerate(test_loader):
 
         batch = pd.DataFrame()
@@ -181,7 +177,6 @@ def main(extractor_model: AutoEncoder, train_img_folder: str, test_img_folder: s
 
         overall_score = cosine_similarity(left_vector, right_vector).detach().cpu().numpy()
 
-        # feature_score = dict()
         pred = pd.DataFrame()
 
         for model_num in range(15):
@@ -200,7 +195,7 @@ def main(extractor_model: AutoEncoder, train_img_folder: str, test_img_folder: s
 
         batch["dl_prediction"] = (overall_score > threshold) * 1  # for boolean to int conversion
 
-        batch["xai_prediction"] = pred
+        batch["xai_prediction"] = pred * 1  # for boolean to int conversion
 
         batch["actual"] = label.numpy()
 
@@ -209,19 +204,33 @@ def main(extractor_model: AutoEncoder, train_img_folder: str, test_img_folder: s
     results.to_csv(path_or_buf="results/RESULTS_{0}_{1}.csv".format(tag, t_stmp),
                    index=False)
 
-    plot_roc(y_true=results["actual"], y_score=results["overall_score"], tag=tag, tstmp=t_stmp)
+    acc1 = (results["xai_prediction"] == results["actual"]).sum() / results.shape[0]
+    acc2 = (results["dl_prediction"] == results["actual"]).sum() / results.shape[0]
+    print("-----------------------")
+    print("Accuracy values:\nDL     | X_AI\n{0:.03f} | {1:.03f}".format(acc2*100, acc1*100))
+    print("-----------------------")
+
+    # plot_roc(y_true=results["actual"], y_score=results["overall_score"], tag=tag, tstmp=t_stmp)
 
     # ----------------------------------------------------------------------------------
 
 
 def get_class_nums():
-    return pd.read_csv(filepath_or_buffer="15FeatureClassValueInformation.csv",
+    """
+    Function to return number of classes and column names.
+
+    :return: Number of classes as ndarray and column names as list.
+    """
+    file = pd.read_csv(filepath_or_buffer="15FeatureClassValueInformation.csv",
                        header=0,
                        index_col=0
-                       ).count().values
+                       )
+
+    return file.count().values, file.columns.to_list()
 
 
 if __name__ == '__main__':
+    # This is sample imput for a test run. Actual input is given from file main.py
     print("Program run started at", time.asctime())
 
     tstmp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
